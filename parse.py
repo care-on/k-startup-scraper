@@ -1,0 +1,210 @@
+import requests
+import urllib.parse
+import ssl
+from bs4 import BeautifulSoup
+from dataclasses import dataclass 
+import re
+from googletrans import Translator
+import json
+import pymysql
+
+
+
+translator = Translator()
+@dataclass 
+class kPost: 
+    flag_type: str = None
+    d_day: str = None
+    article_id : int = None
+    title : str = None
+    agency : str = None
+    additional_info : list = None
+    organization : str = None
+    ##############################
+    date_begin : str = None
+    date_end : str = None
+    content : dict = None
+    
+    def translate(self, dest='en') -> None:
+        self.flag_type = translator.translate(self.flag_type, src='ko', dest=dest).text
+        self.title = translator.translate(self.title, src='ko', dest=dest).text
+        self.agency = translator.translate(self.agency, src='ko', dest=dest).text
+        for i in range(0, len(self.additional_info)):
+            self.additional_info[i] = translator.translate(self.additional_info[i], src='ko', dest=dest).text
+    def toJson(self) -> json:
+        json_object = {}
+        json_object['flag_type'] = self.flag_type
+        json_object['d_day'] = self.d_day
+        json_object['article_id'] = self.article_id
+        json_object['title'] = self.title
+        json_object['agency'] = self.agency
+        json_object['additional_info'] = self.additional_info
+        return json_object
+    def initContent(self) -> bool:
+        url = 'https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=' + str(self.article_id)
+        res = urllib.request.urlopen(url)
+        json_post = {}
+        html_data = BeautifulSoup(res.read(), 'html.parser')
+        info_box = html_data.find(class_='information_box-wrap')
+        assert type(info_box) is not None, 'info_box is None Type'
+
+        info_bg_box = html_data.find(class_='bg_box')
+        assert type(info_bg_box) is not None, 'info_bg_box is None Type'
+
+        information_box = {}
+        for element in info_bg_box.select('ul'):
+            for inner in element.select('li'):
+                table_inner = inner.find(class_='table_inner')
+                assert type(table_inner) is not None, 'table_inner is None Type'
+                tit = table_inner.find(class_='tit')
+                txt = table_inner.find(class_='txt')
+                assert type(tit) is not None, 'tit is None Type'
+                assert type(txt) is not None, 'txt is None Type'
+                information_box[tit.text.strip()] = txt.text.strip()
+        json_post['info_box'] = information_box
+        info_box = html_data.find(class_='information_list-wrap')
+        assert type(info_box) is not None, 'info_box is None Type'
+
+        information_list = []
+        for element in info_box.select('div'):
+            information_list_node = {}
+            title = element.find(class_='title')
+            if title == None:
+                continue
+            information_list_node['title'] = title.text.strip()
+            informaion_dot_list = []
+
+            dot_list = element.find(class_='dot_list-wrap')
+            if dot_list == None:
+                continue
+            for dot in dot_list.select('li'):
+                class_name = dot.get('class')
+                if class_name[0] == 'dot_list':
+                    if len(class_name) > 1:
+                        if class_name[1] == 'bl':
+                            info_pair = {}
+                            title = dot.find(class_='tit').text.strip()
+                            info_pair['red_title'] = title
+                            informaion_dot_list.append(info_pair)
+
+                    else:
+                        info_pair = {}
+                        table_inner = dot.find(class_='table_inner')
+                        if table_inner != None:
+                            title = table_inner.find(class_='tit').text.strip()
+                            text = table_inner.find(class_='txt').text.strip()
+                            info_pair[title] = text
+                            informaion_dot_list.append(info_pair)
+                            continue
+                        list_wrap = dot.find(class_='list_wrap')
+                        if list_wrap != None:
+                            title = dot.find(class_='tit').text.strip()
+                            list_data = list_wrap.find(class_='list').text.strip()
+                            info_pair[title] = list_data
+                            informaion_dot_list.append(info_pair)
+                            continue
+            information_list_node['infos'] = informaion_dot_list
+            information_list.append(information_list_node)
+        attachment_list = []
+        board_file = html_data.find(class_='board_file')
+        if board_file != None:
+            for attachment in board_file.select('li'):
+                file_bg = attachment.find(class_='file_bg')
+                if file_bg != None:
+                    file_node = {}
+                    file_name = file_bg.text.strip()
+                    btn_down = attachment.find(class_='btn_down')
+                    file_node['name'] = file_name
+                    file_node['url'] = btn_down.get('href')
+                    attachment_list.append(file_node)
+
+                    
+        json_post['attachment_list'] = attachment_list   
+        json_post['desc_list'] = information_list
+        self.content = json_post
+        dates = json_post['info_box']['접수기간'].split(' ~ ')
+        self.date_begin = dates[0]
+        self.date_end = dates[1]
+
+        return True
+def getPosts(pageNumb):
+    hdr = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36'}
+    data = 'pbancClssCd=&pbancEndYn=N&schStr=regist&scrapYn=&suptBizClsfcCd=&suptReginCd=&aplyTrgtCd=&bizTrgtAgeCd=&bizEnyyCd=&siEng1=false&siEng2=false&siEng3=false&siEng4=false&siKor1=false&siKor2=false&siKor3=false&siAll=false&bizPbancNm='
+    data = data.encode('utf-8')
+    req = urllib.request.Request('https://www.k-startup.go.kr/web/module/bizpbanc-ongoing_bizpbanc-inquiry-ajax.do?page=' + str(pageNumb), headers=hdr)
+    context = ssl._create_unverified_context()
+    try:
+        res = urllib.request.urlopen(req, context=context, data=data)
+    except:
+        return 0
+    html_data = BeautifulSoup(res.read(), 'html.parser')
+    posts = []
+    for element in html_data.select('li'):
+        post = kPost()
+        tag = element.find(class_='top').find(class_=lambda value: (value and 'flag type' in value))
+        if tag == None:
+            continue
+        post.flag_type = tag.text.strip()
+        
+        tag = element.find(class_='top').find(class_='flag day')
+        if tag == None:
+            continue
+        post.d_day = tag.text.strip()
+
+        tag = element.find(class_='left').find(class_='flag_agency')
+        if tag == None:
+            continue
+        post.agency = tag.text.strip()
+        
+        tag = element.find(class_='middle').find('a', href=True)
+        if tag == None:
+            continue
+        article_id = re.findall(r'\d+', tag['href'])
+        if len(article_id) == 0:
+            continue
+        post.article_id = int(article_id[0])
+        
+        tag = element.find(class_='middle').find(class_='tit')
+        if tag == None:
+            continue
+        post.title = tag.text.strip()
+        
+        tag = element.find(class_='bottom').find_all(class_='list')
+        if tag == None:
+            continue
+        additional_info = []
+        for info in tag:
+            additional_info.append(info.text.strip())
+        post.additional_info = additional_info
+        post.organization = additional_info[1]
+
+        posts.append(post)
+    return posts
+
+def sqlStr(str):
+    return str.replace("'", "\\'").replace('"', '\\"')
+def queryArticles(pageNumb):
+    articles = getPosts(pageNumb)
+    for i in range(0, len(articles)):
+        articles[i].initContent()
+    return articles
+
+def commitArticles(conn, articles):
+    cur = conn.cursor()
+    for article in articles:
+        json_string = json.dumps(article.content)
+        sql = f"INSERT INTO articles(`a_id`, `a_title`, `date_begin`, `date_end`, `agency`, `tag`, `organization`) VALUES ({article.article_id}, '{sqlStr(article.title)}', '{sqlStr(article.date_begin)}', '{sqlStr(article.date_end)}', '{article.agency}', '{sqlStr(article.flag_type)}', '{sqlStr(article.organization)}');" 
+        cur.execute(sql)
+    conn.commit()
+    for article in articles:
+        json_string = json.dumps(article.content, ensure_ascii = False)
+        sql = f"INSERT INTO articleContents(`a_id`, `a_content`) VALUES ({article.article_id}, '{sqlStr(json_string)}');"
+        cur.execute(sql)
+    conn.commit()
+    conn.close()
+
+
+conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8')
+posts = queryArticles(1)
+commitArticles(conn, posts)
+
