@@ -4,13 +4,34 @@ import ssl
 from bs4 import BeautifulSoup
 from dataclasses import dataclass 
 import re
-from googletrans import Translator
 import json
 import pymysql
 
 
 
-translator = Translator()
+@dataclass 
+class kCardNews:
+    title : str = None
+    news_id : int = None
+    release_date : str = None
+    content : dict = None
+    def initContent(self) -> bool:
+        json_news = {}
+        url = 'https://www.k-startup.go.kr/web/contents/webCARD_NEWS.do?page=1&viewCount=32&id=' + str(self.news_id) + '&schBdcode=&schGroupCode=&bdExt9=&bdExt10=&bdExt11=&bdUseyn=&schM=view'
+        res = urllib.request.urlopen(url)
+        html_data = BeautifulSoup(res.read(), 'html.parser')
+        slider_nav = html_data.find(class_='slider_nav')
+        if slider_nav == None:
+            return False
+        
+        url_list = []
+        for element in slider_nav.select('div'):
+            img = element.select_one('img')
+            url_list.append(img.get('src'))
+        json_news['images'] = url_list
+        self.content = json_news
+        return True
+
 @dataclass 
 class kPost: 
     flag_type: str = None
@@ -25,12 +46,6 @@ class kPost:
     date_end : str = None
     content : dict = None
     
-    def translate(self, dest='en') -> None:
-        self.flag_type = translator.translate(self.flag_type, src='ko', dest=dest).text
-        self.title = translator.translate(self.title, src='ko', dest=dest).text
-        self.agency = translator.translate(self.agency, src='ko', dest=dest).text
-        for i in range(0, len(self.additional_info)):
-            self.additional_info[i] = translator.translate(self.additional_info[i], src='ko', dest=dest).text
     def toJson(self) -> json:
         json_object = {}
         json_object['flag_type'] = self.flag_type
@@ -204,7 +219,54 @@ def commitArticles(conn, articles):
     conn.close()
 
 
-conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8')
-posts = queryArticles(1)
-commitArticles(conn, posts)
+
+def getCardNews(pageNumb):
+    url = 'https://www.k-startup.go.kr/web/contents/webCARD_NEWS.do?viewCount=15&page=' + str(pageNumb)
+    res = urllib.request.urlopen(url)
+    html_data = BeautifulSoup(res.read(), 'html.parser')
+    gallery_list = html_data.find(class_='gallery_list card_news')
+    if gallery_list == None:
+        print('gallery_list == None')
+        return []
+    cardnews_list = []
+    for element in gallery_list.select('li'):
+        cardnews = kCardNews()
+        a = element.find('a')
+        title = a.get('title') #
+        cardnews.title = title
+        
+        news_id = re.findall(r'\d+', a.get('onclick'))
+        if len(news_id) == 0:
+            continue
+        news_id = news_id[0] #
+        cardnews.news_id = news_id
+        
+        release_date = a.find(class_='date').text.strip()#
+        cardnews.release_date = release_date
+        cardnews_list.append(cardnews)
+    return cardnews_list
+def queryCardNews(pageNumb):
+    cardnews = getCardNews(pageNumb)
+    for i in range(0, len(cardnews)):
+        cardnews[i].initContent()
+    return cardnews
+
+def commitCardNews(conn, news):
+    cur = conn.cursor()
+    for cardnews in news:
+        json_string = json.dumps(cardnews.content)
+        sql = f"INSERT INTO cardnews(`idcardnews`, `title`, `release_date`, `content`) VALUES ({cardnews.news_id}, '{sqlStr(cardnews.title)}', '{sqlStr(cardnews.release_date)}', '{sqlStr(json_string)}');" 
+        cur.execute(sql)
+    conn.commit()
+    conn.close()
+
+for i in range(1, 5):
+    conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8')
+    #posts = queryArticles(1)
+    #commitArticles(conn, posts)
+    news = queryCardNews(i)
+    commitCardNews(conn, news)
+    print('Process (' + str(i) + ' / 5)')
+
+
 
