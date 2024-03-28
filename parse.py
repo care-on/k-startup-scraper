@@ -20,6 +20,9 @@ class kCardNews:
         url = 'https://www.k-startup.go.kr/web/contents/webCARD_NEWS.do?page=1&viewCount=32&id=' + str(self.news_id) + '&schBdcode=&schGroupCode=&bdExt9=&bdExt10=&bdExt11=&bdUseyn=&schM=view'
         res = urllib.request.urlopen(url)
         html_data = BeautifulSoup(res.read(), 'html.parser')
+        
+        json_news['notice'] = str(html_data.find(class_="txt"))
+        #print(str(json_news['notice']))
         slider_nav = html_data.find(class_='slider_nav')
         if slider_nav == None:
             return False
@@ -254,19 +257,20 @@ def queryCardNews(pageNumb):
 def commitCardNews(conn, news):
     cur = conn.cursor()
     for cardnews in news:
-        json_string = json.dumps(cardnews.content)
+        json_string = json.dumps(cardnews.content, ensure_ascii=False)
         sql = f"INSERT INTO cardnews(`idcardnews`, `title`, `release_date`, `content`) VALUES ({cardnews.news_id}, '{sqlStr(cardnews.title)}', '{sqlStr(cardnews.release_date)}', '{sqlStr(json_string)}');" 
         cur.execute(sql)
     conn.commit()
     conn.close()
 
 for i in range(1, 5):
-    conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8')
+    conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
     #posts = queryArticles(1)
     #commitArticles(conn, posts)
     news = queryCardNews(i)
+    #print(news)
     commitCardNews(conn, news)
     print('Process (' + str(i) + ' / 5)')
-
+    
 
 
