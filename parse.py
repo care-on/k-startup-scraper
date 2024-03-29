@@ -82,47 +82,7 @@ class kPost:
         json_post['info_box'] = information_box
         info_box = html_data.find(class_='information_list-wrap')
         assert type(info_box) is not None, 'info_box is None Type'
-
-        information_list = []
-        for element in info_box.select('div'):
-            information_list_node = {}
-            title = element.find(class_='title')
-            if title == None:
-                continue
-            information_list_node['title'] = title.text.strip()
-            informaion_dot_list = []
-
-            dot_list = element.find(class_='dot_list-wrap')
-            if dot_list == None:
-                continue
-            for dot in dot_list.select('li'):
-                class_name = dot.get('class')
-                if class_name[0] == 'dot_list':
-                    if len(class_name) > 1:
-                        if class_name[1] == 'bl':
-                            info_pair = {}
-                            title = dot.find(class_='tit').text.strip()
-                            info_pair['red_title'] = title
-                            informaion_dot_list.append(info_pair)
-
-                    else:
-                        info_pair = {}
-                        table_inner = dot.find(class_='table_inner')
-                        if table_inner != None:
-                            title = table_inner.find(class_='tit').text.strip()
-                            text = table_inner.find(class_='txt').text.strip()
-                            info_pair[title] = text
-                            informaion_dot_list.append(info_pair)
-                            continue
-                        list_wrap = dot.find(class_='list_wrap')
-                        if list_wrap != None:
-                            title = dot.find(class_='tit').text.strip()
-                            list_data = list_wrap.find(class_='list').text.strip()
-                            info_pair[title] = list_data
-                            informaion_dot_list.append(info_pair)
-                            continue
-            information_list_node['infos'] = informaion_dot_list
-            information_list.append(information_list_node)
+        information_list = str(info_box)
         attachment_list = []
         board_file = html_data.find(class_='board_file')
         if board_file != None:
@@ -210,7 +170,7 @@ def queryArticles(pageNumb):
 def commitArticles(conn, articles):
     cur = conn.cursor()
     for article in articles:
-        json_string = json.dumps(article.content)
+        json_string = json.dumps(article.content, ensure_ascii=False)
         sql = f"INSERT INTO articles(`a_id`, `a_title`, `date_begin`, `date_end`, `agency`, `tag`, `organization`) VALUES ({article.article_id}, '{sqlStr(article.title)}', '{sqlStr(article.date_begin)}', '{sqlStr(article.date_end)}', '{article.agency}', '{sqlStr(article.flag_type)}', '{sqlStr(article.organization)}');" 
         cur.execute(sql)
     conn.commit()
@@ -265,12 +225,13 @@ def commitCardNews(conn, news):
 
 for i in range(1, 5):
     conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
-    #posts = queryArticles(1)
-    #commitArticles(conn, posts)
-    news = queryCardNews(i)
+    posts = queryArticles(i)    
+    #print(posts)
+    #break
+    commitArticles(conn, posts)
+    #news = queryCardNews(i)
     #print(news)
-    commitCardNews(conn, news)
+    #commitCardNews(conn, news)
     print('Process (' + str(i) + ' / 5)')
     
-
 
