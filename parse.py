@@ -167,20 +167,24 @@ def queryArticles(pageNumb):
         articles[i].initContent()
     return articles
 
-def commitArticles(conn, articles):
+def commitArticle(conn, article):
     cur = conn.cursor()
-    for article in articles:
-        json_string = json.dumps(article.content, ensure_ascii=False)
-        sql = f"INSERT INTO articles(`a_id`, `a_title`, `date_begin`, `date_end`, `agency`, `tag`, `organization`) VALUES ({article.article_id}, '{sqlStr(article.title)}', '{sqlStr(article.date_begin)}', '{sqlStr(article.date_end)}', '{article.agency}', '{sqlStr(article.flag_type)}', '{sqlStr(article.organization)}');" 
-        cur.execute(sql)
+    json_string = json.dumps(article.content, ensure_ascii=False)
+    sql = f"INSERT INTO articles(`a_id`, `a_title`, `date_begin`, `date_end`, `agency`, `tag`, `organization`) VALUES ({article.article_id}, '{sqlStr(article.title)}', '{sqlStr(article.date_begin)}', '{sqlStr(article.date_end)}', '{article.agency}', '{sqlStr(article.flag_type)}', '{sqlStr(article.organization)}');" 
+    cur.execute(sql)
     conn.commit()
-    for article in articles:
-        json_string = json.dumps(article.content, ensure_ascii = False)
-        sql = f"INSERT INTO articleContents(`a_id`, `a_content`) VALUES ({article.article_id}, '{sqlStr(json_string)}');"
-        cur.execute(sql)
+    json_string = json.dumps(article.content, ensure_ascii = False)
+    sql = f"INSERT INTO articleContents(`a_id`, `a_content`) VALUES ({article.article_id}, '{sqlStr(json_string)}');"
+    cur.execute(sql)
     conn.commit()
-    conn.close()
-
+    cur.close()
+def updateArticle(conn, article):
+    cur = conn.cursor()
+    json_string = json.dumps(article.content, ensure_ascii = False)
+    sql = f"UPDATE articleContents SET a_content = '{sqlStr(json_string)}' WHERE a_id = {article.article_id};"
+    cur.execute(sql)
+    conn.commit()
+    cur.close()
 
 
 def getCardNews(pageNumb):
@@ -214,24 +218,65 @@ def queryCardNews(pageNumb):
         cardnews[i].initContent()
     return cardnews
 
-def commitCardNews(conn, news):
+def commitCardNews(conn, cardnews):
     cur = conn.cursor()
-    for cardnews in news:
-        json_string = json.dumps(cardnews.content, ensure_ascii=False)
-        sql = f"INSERT INTO cardnews(`idcardnews`, `title`, `release_date`, `content`) VALUES ({cardnews.news_id}, '{sqlStr(cardnews.title)}', '{sqlStr(cardnews.release_date)}', '{sqlStr(json_string)}');" 
-        cur.execute(sql)
+    json_string = json.dumps(cardnews.content, ensure_ascii=False)
+    sql = f"INSERT INTO cardnews(`idcardnews`, `title`, `release_date`, `content`) VALUES ({cardnews.news_id}, '{sqlStr(cardnews.title)}', '{sqlStr(cardnews.release_date)}', '{sqlStr(json_string)}');" 
+    cur.execute(sql)
     conn.commit()
-    conn.close()
+    cur.close()
 
-for i in range(1, 5):
+def updateCardNews(conn, cardnews):
+    cur = conn.cursor()
+    json_string = json.dumps(cardnews.content, ensure_ascii=False)
+    sql = f"UPDATE cardnews SET content = '{sqlStr(json_string)}' WHERE idcardnews = {cardnews.news_id};"
+    cur.execute(sql)
+    conn.commit()
+    cur.close()
+def fetchArticles(conn):
+    ret = []
+    sql = "SELECT a_id FROM articles"
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            result = cur.fetchall()
+            for data in result:
+                ret.append(data[0])
+    return ret
+def fetchCardNews(conn):
+    ret = []
+    sql = "SELECT idcardnews FROM cardnews"
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            result = cur.fetchall()
+            for data in result:
+                ret.append(data[0])
+    return ret
+
+
+conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
+a_articles = fetchArticles(conn)
+print(f"now have {len(a_articles)} for articles")
+conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
+a_cardnews = fetchCardNews(conn)
+print(f"now have {len(a_cardnews)} for cardnews")
+for i in range(1, 7):
     conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
-    posts = queryArticles(i)    
-    #print(posts)
-    #break
-    commitArticles(conn, posts)
-    #news = queryCardNews(i)
-    #print(news)
-    #commitCardNews(conn, news)
-    print('Process (' + str(i) + ' / 5)')
-    
 
+    posts = queryArticles(i)
+    for post in posts:
+        if int(post.article_id) in a_articles:
+            updateArticle(conn, post)
+        else:
+            commitArticle(conn, post)
+
+    cardnews = queryCardNews(i)
+    for post in cardnews:
+        if int(post.news_id) in a_cardnews:
+            updateCardNews(conn, post)
+        else:
+            commitCardNews(conn, post)
+
+    conn.close()
+    print('Process (' + str(i) + ' / 6)')
