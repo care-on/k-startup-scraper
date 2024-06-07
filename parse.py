@@ -255,14 +255,14 @@ def fetchCardNews(conn):
     return ret
 
 
-conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
+conn = pymysql.connect(host='host.h', user='admin', password='pw', db='db', charset='utf8mb4')
 a_articles = fetchArticles(conn)
 print(f"now have {len(a_articles)} for articles")
-conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
+conn = pymysql.connect(host='host.h', user='admin', password='pw', db='db', charset='utf8mb4')
 a_cardnews = fetchCardNews(conn)
 print(f"now have {len(a_cardnews)} for cardnews")
 for i in range(1, 7):
-    conn = pymysql.connect(host='g-startup-db.cvmmi8yioimp.ap-northeast-2.rds.amazonaws.com', user='admin', password='G-start-up!', db='g_startup_db', charset='utf8mb4')
+    conn = pymysql.connect(host='host.h', user='admin', password='pw', db='db', charset='utf8mb4')
 
     posts = queryArticles(i)
     for post in posts:
